@@ -1,6 +1,6 @@
 /* Workout-Timer – Service Worker: hält die App offline verfügbar.
    Bei jeder Änderung an den Dateien VERSION erhöhen. */
-const VERSION = 'wt-v2';
+const VERSION = 'wt-v3';
 const FILES = ['./', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'];
 
