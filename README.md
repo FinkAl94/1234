@@ -16,8 +16,8 @@ Offline-fähige Einzeldatei-App (`index.html`) für eigene Workouts – optimier
 - Darstellung: Automatisch / Hell / Dunkel (Einstellungen)
 
 ## Nutzung (offline am Handy)
-1. Einmalig auf GitHub: *Settings → Pages → Build and deployment → Source: Deploy from a branch*, Branch wählen, Ordner `/ (root)`, *Save*.
-2. Nach 1–2 Minuten ist die App unter `https://<benutzername>.github.io/Test-Chat-gpt/` erreichbar.
+1. Einmalig auf GitHub: *Settings → Pages → Build and deployment → Source: Deploy from a branch*, Branch `main`, Ordner `/ (root)`, *Save*.
+2. Nach 1–2 Minuten ist die App unter `https://<benutzername>.github.io/1234/` erreichbar.
 3. Am Handy öffnen und zum Home-Bildschirm hinzufügen (Android: Chrome → Menü ⋮ → „App installieren“ bzw. „Zum Startbildschirm hinzufügen“).
 4. Ab dann läuft die App komplett ohne Internet. Updates werden beim nächsten Öffnen mit Netz im Hintergrund geladen.
 
