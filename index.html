@@ -9,6 +9,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Workout-Timer">
 <title>Workout-Timer</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
 :root{
   --bg:#0f1115; --surface:#181b22; --surface2:#222632; --line:#2d3242;
@@ -178,6 +181,12 @@ h1,h2,h3,p{margin:0}
 .split .v small{display:block;font-weight:500;font-size:12px;color:var(--muted)}
 .legend{display:flex;gap:14px;font-size:13px;color:var(--muted);margin-top:10px;flex-wrap:wrap}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.reps .repsq{font-size:15px;line-height:1.4}
+.repsctl{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px}
+.repsctl button{min-width:48px;height:48px;border-radius:12px;background:var(--surface2);border:1px solid var(--line);font-weight:700;font-size:16px;padding:0 8px}
+.repsctl input{width:76px;text-align:center;font-size:22px;font-weight:800;padding:8px 4px;font-variant-numeric:tabular-nums}
+.repsex{margin-top:12px;font-size:13px;color:var(--muted);line-height:1.5;text-align:center}
+.hero .sub .plus{color:var(--work)}
 .badge{display:inline-block;font-size:12px;font-weight:700;padding:3px 8px;border-radius:99px;background:var(--surface2);color:var(--muted);margin-left:6px;vertical-align:2px}
 
 /* History */
@@ -233,10 +242,10 @@ const I = {
 /* ================= Daten ================= */
 const LS_KEY = 'workoutTimer.v1';
 const MODES = { interval:'Tabata / EMOM', amrap:'AMRAP', fortime:'For Time' };
-const DEF = { mode:'interval', interval:{ work:50, rest:10, rounds:3, roundRest:0 }, amrap:{ minutes:12 }, fortime:{ rounds:5 } };
+const DEF = { mode:'interval', interval:{ work:50, rest:10, rounds:3, roundRest:0 }, amrap:{ minutes:12 }, fortime:{ rounds:5, cap:0 } };
 const LIMITS = {
   'interval.work':[5,900,5], 'interval.rest':[0,900,5], 'interval.rounds':[1,99,1], 'interval.roundRest':[0,900,5],
-  'amrap.minutes':[1,120,1], 'fortime.rounds':[1,99,1], 'prefs.prep':[0,60,5]
+  'amrap.minutes':[1,120,1], 'fortime.rounds':[1,99,1], 'fortime.cap':[0,120,1], 'prefs.prep':[0,60,5]
 };
 const PRESETS = [[50,10,'50/10'],[45,15,'45/15'],[40,20,'40/20'],[30,30,'30/30'],[20,10,'20/10 Tabata']];
 
@@ -410,10 +419,10 @@ function setupHTML(){
       <div class="summary">${plural(n,'Übung','Übungen')} × ${plural(c.rounds,'Runde','Runden')} = <b>${n*c.rounds} Intervalle</b><br>Dauer: <b>${fmt(tot)} min</b>${db.prefs.prep ? ` <span class="muted">(+ ${db.prefs.prep} s Vorbereitung)</span>` : ''}</div>`;
   } else if (m === 'amrap') {
     body = `<div class="card" style="margin-top:14px;padding:4px 16px">${stepper('amrap.minutes','Zeitlimit',s.amrap.minutes,'min')}</div>
-      <p class="hint">Der Timer läuft rückwärts. Tippe nach jeder kompletten Runde auf den großen Button. Am Ende siehst du alle Rundenzeiten und den Durchschnitt.</p>`;
+      <p class="hint">Der Timer läuft rückwärts. Tippe nach jeder kompletten Runde auf den großen Button. Am Ende trägst du die Wiederholungen der angefangenen Runde ein und siehst alle Rundenzeiten mit Durchschnitt.</p>`;
   } else {
-    body = `<div class="card" style="margin-top:14px;padding:4px 16px">${stepper('fortime.rounds','Runden',s.fortime.rounds,'×')}</div>
-      <p class="hint">Die Stoppuhr läuft. Tippe nach jeder Runde auf den großen Button – nach der letzten Runde stoppt die Zeit automatisch.</p>`;
+    body = `<div class="card" style="margin-top:14px;padding:4px 16px">${stepper('fortime.rounds','Runden',s.fortime.rounds,'×')}${stepper('fortime.cap','Zeitlimit',s.fortime.cap,'min','Time Cap · 0 = kein Limit')}</div>
+      <p class="hint">Die Stoppuhr läuft. Tippe nach jeder Runde auf den großen Button – nach der letzten Runde stoppt die Zeit automatisch.${s.fortime.cap ? ` Ist das Zeitlimit von ${s.fortime.cap} min vorher erreicht, endet das Training dort und du trägst die Wiederholungen der angefangenen Runde ein.` : ''}</p>`;
   }
   return `<div class="wrap">
     <header class="top"><button class="back" data-act="home">‹ Workouts</button></header>
@@ -502,6 +511,7 @@ function startRun(){
           acc:0, startedAt:now(), running:true, splits:[], lastMark:0, lastTap:0, segIdx:-1, lastCount:null, started:false, phase:null };
   if (run.mode === 'interval') { const b = buildSegments(run.ex, run.cfg, db.prefs.prep); run.segs = b.segs; run.total = b.total; }
   if (run.mode === 'amrap') run.dur = run.cfg.minutes * 60000;
+  if (run.mode === 'fortime') run.capMs = (run.cfg.cap || 0) * 60000;
   lockScreen();
   go('run');
   run.timer = setInterval(tick, 100);
@@ -555,7 +565,7 @@ function tickRounds(e){
   const amrap = run.mode === 'amrap', N = run.cfg.rounds;
   if (e < run.prep) {
     const rem = run.prep - e;
-    setPhase('prep'); setT(el.pill, 'BEREIT MACHEN'); setT(el.meta, amrap ? `AMRAP ${run.cfg.minutes} min` : `For Time · ${N} Runden`);
+    setPhase('prep'); setT(el.pill, 'BEREIT MACHEN'); setT(el.meta, amrap ? `AMRAP ${run.cfg.minutes} min` : `For Time · ${N} Runden` + (run.cfg.cap ? `\nCap ${run.cfg.cap} min` : ''));
     countdownBeeps(rem, run.prep);
     setT(el.timer, fmtCount(rem));
     el.roundBtn.disabled = true; el.undoBtn.disabled = true;
@@ -573,11 +583,16 @@ function tickRounds(e){
     setT(el.sRounds, String(k));
     setT(el.roundSub, `Runde ${k + 1}`);
   } else {
+    if (run.capMs) {
+      if (main >= run.capMs) return finish(false, true);
+      countdownBeeps(run.capMs - main, run.capMs);
+      if (run.running && !run.saidMinute && run.capMs - main <= 60000 && run.capMs > 120000) { run.saidMinute = true; say('Noch eine Minute'); beep(990, .2); }
+    }
     setT(el.timer, fmtMs(main));
     setT(el.sRounds, `${Math.min(k + 1, N)}/${N}`);
     setT(el.roundSub, k + 1 >= N ? `Letzte Runde (${N}/${N})` : `Runde ${k + 1} von ${N}`);
   }
-  setT(el.meta, amrap ? `${run.cfg.minutes} min` : `${N} Runden`);
+  setT(el.meta, amrap ? `${run.cfg.minutes} min` : run.capMs ? `Cap ${run.cfg.cap} min\nnoch ${fmt(Math.ceil((run.capMs - main) / 1000))}` : `${N} Runden`);
   setT(el.sCur, fmt(Math.floor((main - run.lastMark) / 1000)));
   setT(el.sAvg, k ? fmt(Math.round(run.lastMark / k / 1000)) : '–');
   el.undoBtn.disabled = !k;
@@ -610,7 +625,7 @@ function jumpTo(ms){ run.acc = ms; run.startedAt = now(); run.segIdx = -1; tick(
 function skipSeg(){ const i = run.segIdx; if (i < run.segs.length - 1) jumpTo(run.segs[i + 1].start); else finish(true); }
 function prevSeg(){ const i = run.segIdx, seg = run.segs[i]; jumpTo(elapsed() - seg.start > 2000 || i === 0 ? seg.start : run.segs[i - 1].start); }
 
-function finish(early){
+function finish(early, capped){
   if (!run) return;
   const e = elapsed();
   clearInterval(run.timer); unlockScreen();
@@ -625,11 +640,17 @@ function finish(early){
   } else {
     r.splits = run.splits.slice();
     if (run.mode === 'amrap') { r.total = early ? Math.max(0, e - run.prep) : run.dur; r.partial = Math.max(0, r.total - run.lastMark); }
-    else { r.target = run.cfg.rounds; r.total = early ? Math.max(0, e - run.prep) : run.lastMark; }
+    else {
+      r.target = run.cfg.rounds; r.cap = run.cfg.cap || 0;
+      if (capped) { r.capped = true; r.total = run.capMs; }
+      else r.total = early ? Math.max(0, e - run.prep) : run.lastMark;
+      if (capped || early) r.partial = Math.max(0, r.total - run.lastMark);
+    }
+    r.extraReps = 0;
   }
   const wid = run.wid;
   run = null;
-  if (!early) { sfx.end(); vib([300,120,300]); say('Geschafft!'); }
+  if (!early) { sfx.end(); vib([300,120,300]); say(capped ? 'Zeitlimit erreicht' : 'Geschafft!'); }
   if (!did) { go('setup', { id:wid }); return; }
   db.history.unshift(r); db.history = db.history.slice(0, 500); save();
   go('result', { res:r });
@@ -641,9 +662,11 @@ function stats(splits){
   const sum = splits.reduce((a, b) => a + b, 0);
   return { avg:sum / splits.length, min:Math.min(...splits), max:Math.max(...splits) };
 }
+const repsTxt = r => r.extraReps ? ` + ${r.extraReps} Wdh.` : '';
+const hasPartial = r => r.mode === 'amrap' || (r.mode === 'fortime' && (r.capped || r.early));
 function headline(r){
-  if (r.mode === 'amrap') return plural(r.splits.length, 'Runde', 'Runden') + (r.partial >= 1000 ? ' + ' + fmt(r.partial / 1000) : '');
-  if (r.mode === 'fortime') return r.early ? `${r.splits.length}/${r.target} Runden` : fmtMs(r.total);
+  if (r.mode === 'amrap') return plural(r.splits.length, 'Runde', 'Runden') + repsTxt(r);
+  if (r.mode === 'fortime') return r.capped ? `${r.splits.length}/${r.target} Runden${repsTxt(r)} · Cap` : r.early ? `${r.splits.length}/${r.target} Runden${repsTxt(r)}` : fmtMs(r.total);
   return `${r.intervalsDone}/${r.intervalsTotal} Intervalle`;
 }
 const dateStr = iso => new Date(iso).toLocaleString('de-DE', { weekday:'short', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
@@ -659,18 +682,20 @@ function resultHTML(){
   } else {
     const amrap = r.mode === 'amrap';
     hero = amrap
-      ? `<div class="big">${plural(r.splits.length, 'Runde', 'Runden')}</div><div class="sub">${r.partial >= 1000 ? `+ angefangene Runde (${fmt(r.partial / 1000)})` : ''} in ${fmt(r.total / 1000)} min${r.early ? ' · vorzeitig beendet' : ''}</div>`
-      : `<div class="big">${fmtMs(r.total)}</div><div class="sub">${r.early ? `abgebrochen nach ${r.splits.length} von ${r.target} Runden` : `${plural(r.target, 'Runde', 'Runden')} geschafft`}</div>`;
+      ? `<div class="big">${plural(r.splits.length, 'Runde', 'Runden')}</div><div class="sub">${r.extraReps ? `<b class="plus">+ ${r.extraReps} Wdh.</b> · ` : ''}in ${fmt(r.total / 1000)} min${r.early ? ' · vorzeitig beendet' : ''}</div>`
+      : r.capped
+      ? `<div class="big">${r.splits.length}/${r.target} Runden</div><div class="sub">${r.extraReps ? `<b class="plus">+ ${r.extraReps} Wdh.</b> · ` : ''}Zeitlimit ${r.cap} min erreicht</div>`
+      : `<div class="big">${fmtMs(r.total)}</div><div class="sub">${r.early ? `abgebrochen nach ${r.splits.length} von ${r.target} Runden${repsTxt(r)}` : `${plural(r.target, 'Runde', 'Runden')} geschafft${r.cap ? ` · Zeitlimit ${r.cap} min` : ''}`}</div>`;
     tiles = tile('Ø Rundenzeit', st ? fmtMs(st.avg) : '–') +
             tile(amrap ? 'Zeitlimit' : 'Runden', amrap ? r.cfg.minutes + ' min' : `${r.splits.length}/${r.target}`) +
             tile('Schnellste', st ? fmtMs(st.min) : '–', st ? 'Runde ' + (r.splits.indexOf(st.min) + 1) : '') +
             tile('Langsamste', st ? fmtMs(st.max) : '–', st ? 'Runde ' + (r.splits.indexOf(st.max) + 1) : '');
-    if (r.splits.length) {
-      const mx = st.max, multi = r.splits.length > 1;
+    if (r.splits.length || (hasPartial(r) && r.partial >= 1000)) {
+      const mx = st ? st.max : r.partial, multi = r.splits.length > 1;
       list = r.splits.map((s, i) => `<li class="split ${multi && s === st.min ? 'best' : ''} ${multi && s === st.max ? 'worst' : ''}">
           <span class="n">Runde ${i + 1}</span><div class="bar"><i style="width:${(100 * s / mx).toFixed(1)}%"></i></div>
           <span class="v">${fmtMs(s)}${multi ? `<small>${fmtDelta(s - st.avg)}</small>` : ''}</span></li>`).join('');
-      if (amrap && r.partial >= 1000) list += `<li class="split partial"><span class="n">angefangen</span><div class="bar"><i style="width:${Math.min(100, 100 * r.partial / mx).toFixed(1)}%"></i></div><span class="v">${fmtMs(r.partial)}</span></li>`;
+      if (hasPartial(r) && r.partial >= 1000) list += `<li class="split partial"><span class="n">angefangen</span><div class="bar"><i style="width:${Math.min(100, 100 * r.partial / mx).toFixed(1)}%"></i></div><span class="v">${fmtMs(r.partial)}${r.extraReps ? `<small>${r.extraReps} Wdh.</small>` : ''}</span></li>`;
       list = `<label class="lbl">Rundenzeiten</label><div class="card" style="padding:6px 16px"><ul class="splits">${list}</ul></div>
         ${multi ? `<div class="legend"><span><i style="background:var(--best)"></i>schnellste</span><span><i style="background:var(--worst)"></i>langsamste</span><span>± = Abweichung vom Durchschnitt</span></div>` : ''}`;
     }
@@ -684,10 +709,28 @@ function resultHTML(){
     <div class="muted" style="margin:-12px 0 8px;font-size:14px">${dateStr(r.date)}</div>
     <div class="hero">${hero}</div>
     <div class="tiles">${tiles}</div>
+    ${hasPartial(r) ? repsCard(r) : ''}
     ${list}
     <div style="margin-top:22px">${btns}</div>
   </div>`;
 }
+
+function repsCard(r){
+  const n = r.extraReps || 0;
+  return `<label class="lbl">Angefangene Runde</label>
+  <div class="card reps">
+    <div class="repsq">Wie viele Wiederholungen hast du in der angefangenen Runde (Runde ${r.splits.length + 1}) noch geschafft?</div>
+    <div class="repsctl">
+      <button data-act="reps" data-d="-5" ${n < 1 ? 'disabled' : ''}>−5</button>
+      <button data-act="reps" data-d="-1" ${n < 1 ? 'disabled' : ''}>−1</button>
+      <input class="in" inputmode="numeric" pattern="[0-9]*" data-reps="1" value="${n}" aria-label="Wiederholungen">
+      <button data-act="reps" data-d="1">+1</button>
+      <button data-act="reps" data-d="5">+5</button>
+    </div>
+    <div class="repsex">${r.exercises.map(esc).join(' · ')}</div>
+  </div>`;
+}
+function setReps(v){ const r = view.res; r.extraReps = clamp(isNaN(v) ? 0 : Math.round(v), 0, 9999); save(); render(); }
 
 function historyHTML(){
   const items = db.history.map(r => `<div class="card hitem" data-act="showHist" data-id="${r.id}">
@@ -738,6 +781,7 @@ const A = {
   mode: b => { view.s.mode = b.dataset.mode; persistSetup(); render(); },
   preset: b => { view.s.interval.work = +b.dataset.w; view.s.interval.rest = +b.dataset.r; persistSetup(); render(); },
   step: b => { const k = b.dataset.k, [m, f] = k.split('.'); const cur = m === 'prefs' ? db.prefs[f] : view.s[m][f]; setStep(k, cur + Number(b.dataset.d)); },
+  reps: b => setReps((view.res.extraReps || 0) + Number(b.dataset.d)),
   start: startRun,
   toggle: togglePause,
   skip: skipSeg,
@@ -772,6 +816,7 @@ app.addEventListener('input', e => {
 app.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.stepK) setStep(t.dataset.stepK, parseInt(t.value, 10));
+  if (t.dataset.reps) setReps(parseInt(t.value, 10));
   if (t.dataset.pref) { db.prefs[t.dataset.pref] = t.checked; save(); if (t.checked && t.dataset.pref === 'sound') { unlockAudio(); sfx.tap(); } if (t.checked && t.dataset.pref === 'voice') { unlockAudio(); say('Sprachansage an'); } }
 });
 app.addEventListener('keydown', e => {
@@ -781,7 +826,7 @@ app.addEventListener('keydown', e => {
     if (i === view.draft.exercises.length - 1) editAddEx();
     else app.querySelectorAll('[data-k="name"]')[i + 1].focus();
   }
-  if (e.key === 'Enter' && t.dataset && t.dataset.stepK) t.blur();
+  if (e.key === 'Enter' && t.dataset && (t.dataset.stepK || t.dataset.reps)) t.blur();
 });
 $('#importFile').addEventListener('change', e => {
   const file = e.target.files[0]; e.target.value = ''; if (!file) return;
@@ -800,6 +845,12 @@ $('#importFile').addEventListener('change', e => {
 });
 
 render();
+
+/* ================= Offline (PWA) ================= */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch(e){}
 </script>
 </body>
 </html>
