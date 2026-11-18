@@ -1,6 +1,6 @@
 /* Workout-Timer – Service Worker: hält die App offline verfügbar.
    Bei jeder Änderung an den Dateien VERSION erhöhen. */
-const VERSION = 'wt-v4';
+const VERSION = 'wt-v3';
 const FILES = ['./', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'];
 
@@ -8,7 +8,7 @@ self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('wt-') && k !== VERSION).map(k => caches.delete(k))))
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 /* Sofort aus dem Speicher antworten (funktioniert ohne Netz),
@@ -16,8 +16,6 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
-  /* Das Haushaltsbuch liegt im Unterordner haushaltsbuch/ und hat sein eigenes Offline-Skript. */
-  if (new URL(req.url).pathname.startsWith(new URL('./haushaltsbuch/', location).pathname)) return;
   const key = req.mode === 'navigate' ? './index.html' : req;
   e.respondWith(caches.open(VERSION).then(async cache => {
     const hit = await cache.match(key, { ignoreSearch: true });
